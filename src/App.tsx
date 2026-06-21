@@ -11,14 +11,14 @@ import ConfettiLayer from './components/ConfettiLayer';
 
 import { usePersistedState, clearPersistedKey } from './hooks/usePersistedState';
 import { useWheel, type SpinResult } from './hooks/useWheel';
+import { useSupabaseParticipants } from './hooks/useSupabaseParticipants';
 
-import type { Participant, WinnerRecord, ToastMessage } from './types';
+import type { WinnerRecord, ToastMessage } from './types';
 import { INITIAL_PRIZES } from './data/initialState';
 import { generateId } from './utils/idGenerator';
 
 // ─── STORAGE KEYS ────────────────────────────────────────────────────────────
 const STORAGE_KEYS = {
-  PARTICIPANTS: 'jeanys_participants',
   PRIZES: 'jeanys_prizes',
   WINNERS: 'jeanys_winners',
 } as const;
@@ -26,11 +26,18 @@ const STORAGE_KEYS = {
 // ─── APP ─────────────────────────────────────────────────────────────────────
 
 const App: React.FC = () => {
-  // ── Persisted state ──────────────────────────────────────────────────────
-  const [participants, setParticipants] = usePersistedState<Participant[]>(
-    STORAGE_KEYS.PARTICIPANTS,
-    []
-  );
+  // ── Supabase participants (replaces localStorage for participants) ─────────
+  const {
+    participants,
+    addParticipants: dbAddParticipants,
+    removeParticipant: dbRemoveParticipant,
+    markWon: dbMarkWon,
+    resetAll: dbResetAll,
+    shuffleParticipants,
+    setParticipants,
+  } = useSupabaseParticipants();
+
+  // ── Prizes and Winners still persisted in localStorage ───────────────────
   const [prizes, setPrizes] = usePersistedState(
     STORAGE_KEYS.PRIZES,
     INITIAL_PRIZES
@@ -59,13 +66,16 @@ const App: React.FC = () => {
   // ── Spin callbacks ───────────────────────────────────────────────────────
   const handleSpinComplete = useCallback(
     (result: SpinResult) => {
+      // Update local participants state (optimistic)
       setParticipants(result.updatedParticipants);
+      // Mark winner in Supabase
+      dbMarkWon(result.winner.name);
       setPrizes(result.updatedPrizes);
       setWinners((prev) => [...prev, result.record]);
       setPendingWinner(result.record);
       addToast(`🎉 ${result.winner.name} won ${result.record.prizeLabel}!`, 'success');
     },
-    [setParticipants, setPrizes, setWinners, addToast]
+    [setParticipants, dbMarkWon, setPrizes, setWinners, addToast]
   );
 
   const handleNoEligible = useCallback(() => {
@@ -83,16 +93,9 @@ const App: React.FC = () => {
   // ── Shuffle participants ─────────────────────────────────────────────────
   const handleShuffleParticipants = useCallback(() => {
     if (isSpinning) return;
-    setParticipants((prev) => {
-      const shuffled = [...prev];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      return shuffled;
-    });
+    shuffleParticipants();
     addToast('🔀 Participants shuffled!', 'info');
-  }, [isSpinning, setParticipants, addToast]);
+  }, [isSpinning, shuffleParticipants, addToast]);
 
   // ── Restart Draw ─────────────────────────────────────────────────────────
   const handleRestartDraw = useCallback(() => {
@@ -100,44 +103,42 @@ const App: React.FC = () => {
     if (window.confirm("Are you sure you want to restart? This will clear all winners but keep the participant list.")) {
       setPrizes(INITIAL_PRIZES);
       setWinners([]);
+      // Reset hasWon flag in Supabase for all participants
       setParticipants((prev) => prev.map(p => ({ ...p, hasWon: false })));
+      import('./lib/supabase').then(({ supabase }) => {
+        supabase.from('participants').update({ hasWon: false }).neq('id', '00000000-0000-0000-0000-000000000000');
+      });
       addToast('🔄 Draw has been restarted!', 'info');
     }
   }, [isSpinning, setPrizes, setWinners, setParticipants, addToast]);
 
   // ── Admin: add participants ──────────────────────────────────────────────
   const handleAddParticipants = useCallback(
-    (names: string[]) => {
-      const newEntries: Participant[] = names.map((name) => ({
-        id: generateId(),
-        name: name.trim(),
-        hasWon: false,
-      }));
-      setParticipants((prev) => [...prev, ...newEntries]);
+    async (names: string[]) => {
+      await dbAddParticipants(names);
       addToast(`✅ Added ${names.length} entr${names.length === 1 ? 'y' : 'ies'}.`, 'success');
     },
-    [setParticipants, addToast]
+    [dbAddParticipants, addToast]
   );
 
   // ── Admin: remove participant ────────────────────────────────────────────
   const handleRemoveParticipant = useCallback(
-    (targetName: string) => {
-      const normalizedTarget = targetName.trim().toLowerCase();
-      setParticipants((prev) => prev.filter(p => p.name.trim().toLowerCase() !== normalizedTarget));
+    async (targetName: string) => {
+      await dbRemoveParticipant(targetName);
       addToast(`🗑️ Removed "${targetName}".`, 'info');
     },
-    [setParticipants, addToast]
+    [dbRemoveParticipant, addToast]
   );
 
   // ── Admin: reset ─────────────────────────────────────────────────────────
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
+    await dbResetAll();
     Object.values(STORAGE_KEYS).forEach(clearPersistedKey);
-    setParticipants([]);
     setPrizes(INITIAL_PRIZES);
     setWinners([]);
     setPendingWinner(null);
     addToast('🔄 All data has been reset.', 'info');
-  }, [setParticipants, setPrizes, setWinners, addToast]);
+  }, [dbResetAll, setPrizes, setWinners, addToast]);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
