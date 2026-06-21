@@ -12,8 +12,6 @@ const SEGMENT_COLORS = [
   '#FFF0F5', // off-white blush
 ];
 
-const WON_OVERLAY_ALPHA = 0.38; // opacity for won segments
-
 interface WheelProps {
   participants: Participant[];
   rotation: number; // radians, controlled externally by useWheel
@@ -87,10 +85,6 @@ const Wheel: React.FC<WheelProps> = ({ participants, rotation }) => {
 
       // ── Segment fill ──────────────────────────────────────────────────
       ctx.save();
-
-      if (participant.hasWon) {
-        ctx.globalAlpha = WON_OVERLAY_ALPHA;
-      }
 
       ctx.beginPath();
       ctx.moveTo(0, 0);
