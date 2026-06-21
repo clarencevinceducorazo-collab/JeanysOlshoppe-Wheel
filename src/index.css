@@ -35,6 +35,10 @@ body {
   color: #3a1a26;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  /* Support notch / home-bar on iOS & Android */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 #root { min-height: 100vh; }
@@ -72,6 +76,7 @@ body {
   font-family: var(--font-sans);
   font-weight: 600;
   padding: 0.65rem 1.6rem;
+  min-height: 44px;
   border-radius: 999px;
   border: none;
   cursor: pointer;
@@ -101,6 +106,7 @@ body {
   font-family: var(--font-sans);
   font-weight: 500;
   padding: 0.55rem 1.3rem;
+  min-height: 44px;
   border-radius: 999px;
   border: 2px solid var(--color-pink-mid);
   cursor: pointer;
@@ -119,6 +125,7 @@ body {
   font-family: var(--font-sans);
   font-weight: 600;
   padding: 0.55rem 1.3rem;
+  min-height: 44px;
   border-radius: 999px;
   border: none;
   cursor: pointer;
@@ -212,6 +219,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 1rem env(safe-area-inset-right, 1rem) 1rem env(safe-area-inset-left, 1rem);
   background: rgba(255, 230, 236, 0.55);
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
@@ -393,9 +401,10 @@ body {
    ============================================================ */
 .tab-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
   background: rgba(255,229,236,0.5);
-  border-radius: 999px;
+  border-radius: 1.25rem;
   padding: 0.25rem;
 }
 .tab-btn {
@@ -434,24 +443,47 @@ body {
    ============================================================ */
 .app-layout {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
-  padding: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  padding: clamp(0.75rem, 3vw, 1rem);
   max-width: 1400px;
   margin: 0 auto;
 }
 
 @media (min-width: 900px) {
   .app-layout {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     padding: 1.5rem;
+    gap: 1.5rem;
   }
 }
 
 @media (min-width: 1200px) {
   .app-layout {
-    grid-template-columns: 600px 1fr;
+    grid-template-columns: minmax(0, 580px) minmax(0, 1fr);
     gap: 2rem;
+  }
+}
+
+/* Wheel size control: cap at viewport width on small screens */
+.wheel-container {
+  width: 100%;
+  max-width: min(100%, 540px);
+  margin: 0 auto;
+}
+
+/* Scrollable table for narrow viewports */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide time column on very small screens */
+@media (max-width: 479px) {
+  .hide-xs { display: none !important; }
+  .tab-btn {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.8rem;
   }
 }
 

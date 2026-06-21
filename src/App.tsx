@@ -152,7 +152,7 @@ const App: React.FC = () => {
       <header
         style={{
           textAlign: 'center',
-          padding: '2rem 1rem 1rem',
+          padding: 'clamp(1rem, 4vw, 2rem) clamp(0.75rem, 3vw, 1rem) 1rem',
           position: 'relative',
           zIndex: 2,
         }}
@@ -229,7 +229,7 @@ const App: React.FC = () => {
       </header>
 
       {/* ── PRIZE PROGRESS ─────────────────────────────────────────────── */}
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 1rem 0.5rem' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 clamp(0.75rem, 3vw, 1rem) 0.5rem' }}>
         <PrizeProgress prizes={prizes} winners={winners} />
       </div>
 
@@ -245,6 +245,8 @@ const App: React.FC = () => {
             transition={{ delay: 0.15, duration: 0.5 }}
           >
             <div className="wheel-wrapper">
+              {/* Constrain wheel canvas width */}
+              <div className="wheel-container">
               {/* Fixed pointer at top */}
               <div
                 aria-hidden
@@ -262,6 +264,7 @@ const App: React.FC = () => {
 
               {/* The canvas wheel */}
               <Wheel participants={participants} rotation={rotation} />
+              </div>{/* end wheel-container */}
 
               {/* Spinning overlay text */}
               {isSpinning && (

@@ -72,7 +72,7 @@ const PrizeProgress: React.FC<PrizeProgressProps> = ({ prizes, winners }) => {
                 color: prize.isDrawn ? '#fff' : '#9a6070',
                 border: prize.isDrawn ? '1px solid #C9184A' : '1px solid #d4b0bc',
                 transition: 'all 0.3s ease',
-                maxWidth: 180,
+                maxWidth: 'clamp(90px, 28vw, 180px)',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',

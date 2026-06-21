@@ -32,7 +32,7 @@ const WinnersTable: React.FC<WinnersTableProps> = ({ winners, prizes }) => {
 
   return (
     <div className="glass-card overflow-hidden">
-      <div style={{ overflowX: 'auto' }}>
+      <div className="table-scroll">
         <table className="data-table">
           <thead>
             <tr>
@@ -40,7 +40,7 @@ const WinnersTable: React.FC<WinnersTableProps> = ({ winners, prizes }) => {
               <th>Winner</th>
               <th>Prize</th>
               <th>Item</th>
-              <th style={{ whiteSpace: 'nowrap' }}>Time</th>
+              <th className="hide-xs" style={{ whiteSpace: 'nowrap' }}>Time</th>
             </tr>
           </thead>
           <tbody>
@@ -62,7 +62,7 @@ const WinnersTable: React.FC<WinnersTableProps> = ({ winners, prizes }) => {
                 <td style={{ fontSize: '0.85rem', color: '#4a1525' }}>
                   {record.itemName}
                 </td>
-                <td style={{ fontSize: '0.78rem', color: '#9a6070', whiteSpace: 'nowrap' }}>
+                <td className="hide-xs" style={{ fontSize: '0.78rem', color: '#9a6070', whiteSpace: 'nowrap' }}>
                   {new Date(record.timestamp).toLocaleString('en-PH', {
                     month: 'short',
                     day: 'numeric',

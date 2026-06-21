@@ -83,8 +83,8 @@ const WinnerModal: React.FC<WinnerModalProps> = ({ winner, onClose }) => {
             className="glass-card relative"
             style={{
               maxWidth: 480,
-              width: '90vw',
-              padding: '2.5rem 2rem',
+              width: 'min(92vw, 480px)',
+              padding: 'clamp(1.2rem, 5vw, 2.5rem) clamp(1rem, 4vw, 2rem)',
               textAlign: 'center',
               overflow: 'hidden',
               zIndex: 10000,
