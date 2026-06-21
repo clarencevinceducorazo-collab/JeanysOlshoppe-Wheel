@@ -142,7 +142,7 @@ export function useWheel({
 
       const START_ROT = rotationRef.current;
       const TOTAL_DELTA = totalRot - START_ROT;
-      const DURATION_MS = 6000 + Math.random() * 2000;
+      const DURATION_MS = 7000 + Math.random() * 8000; // 7–15 seconds
       const startTime = performance.now();
 
       function animate(now: number) {
