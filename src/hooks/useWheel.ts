@@ -86,44 +86,53 @@ export function useWheel({
   }, []);
 
   /**
-   * Main spin trigger.
-   * @param prizeIndex — index into the prizes array (the one being drawn)
+   * pure helper to calculate the spin target (used by Admin)
    */
-  const triggerSpin = useCallback(
+  const generateSpinTarget = useCallback(
     (prizeIndex: number) => {
-      if (isSpinning) return;
-
       const prize = prizes[prizeIndex];
-      if (!prize || prize.isDrawn) return;
+      if (!prize || prize.isDrawn) return null;
 
-      // ── 1. Pick winner FIRST (before any animation) ──────────────────
       const winner = pickRandomEligible(participants);
       if (winner === null) {
         onNoEligible();
-        return;
+        return null;
       }
-      // winner is definitely non-null past this point
-      const safeWinner: Participant = winner;
+
+      let finalItemName = prize.itemName;
+      if (finalItemName.includes('Mystery Coupon')) {
+        const couponValues = [50, 100, 150, 200];
+        const rolledValue = couponValues[Math.floor(Math.random() * couponValues.length)];
+        finalItemName = `Coupon worth ₱${rolledValue}`;
+      }
+
+      return { winner, finalItemName };
+    },
+    [participants, prizes, onNoEligible]
+  );
+
+  /**
+   * Main spin execution (used by both Admin and Viewers)
+   */
+  const playSpinAnimation = useCallback(
+    (prizeIndex: number, winner: Participant, finalItemName: string) => {
+      if (isSpinning) return;
+
+      const prize = prizes[prizeIndex];
+      if (!prize) return;
 
       // ── 2. Calculate segment geometry ────────────────────────────────
       const segCount = participants.length;
-      const segAngle = (2 * Math.PI) / segCount; // radians per segment
+      const segAngle = (2 * Math.PI) / segCount;
 
-      // Find winner's segment index (its original position in participants array)
       const winnerIdx = participants.findIndex((p) => p.id === winner.id);
-
-      // The wheel is drawn starting segment 0 at angle -π/2 (top of circle).
-      // Pointer is at top (π/2 from positive X). Segment centre angle:
-      //   segCentre = -π/2 + (idx + 0.5) * segAngle
-      // We need that angle to equal -π/2 at the pointer (top).
-      // So targetRot = -π/2 - segCentreAngle
+      
       const segCentreAngle = -Math.PI / 2 + (winnerIdx + 0.5) * segAngle;
-      const neededRot = -Math.PI / 2 - segCentreAngle; // angle at which wheel rotation puts winner at top
+      const neededRot = -Math.PI / 2 - segCentreAngle;
 
       // Add 15-20 full turns for extra excitement
-      const fullTurns = Math.floor(Math.random() * 6) + 15; // 15..20 turns
+      const fullTurns = Math.floor(Math.random() * 6) + 15;
       const currentRot = rotationRef.current % (2 * Math.PI);
-      // Normalise so we always spin forward (positive direction)
       let delta = (neededRot - currentRot + 2 * Math.PI) % (2 * Math.PI);
       const totalRot = rotationRef.current + fullTurns * 2 * Math.PI + delta;
 
@@ -133,7 +142,7 @@ export function useWheel({
 
       const START_ROT = rotationRef.current;
       const TOTAL_DELTA = totalRot - START_ROT;
-      const DURATION_MS = 6000 + Math.random() * 2000; // 6–8s
+      const DURATION_MS = 6000 + Math.random() * 2000;
       const startTime = performance.now();
 
       function animate(now: number) {
@@ -156,37 +165,34 @@ export function useWheel({
           playWinSound();
           fireConfetti();
 
-          // Determine final item name (random roll for coupons)
-          let finalItemName = prize.itemName;
-          if (finalItemName.includes('Mystery Coupon')) {
-            const couponValues = [50, 100, 150, 200];
-            const rolledValue = couponValues[Math.floor(Math.random() * couponValues.length)];
-            finalItemName = `Coupon worth ₱${rolledValue}`;
-          }
-
           // Build updated state
-          const updatedParticipants = markPersonAsWon(participants, safeWinner.name);
+          const updatedParticipants = markPersonAsWon(participants, winner.name);
           const updatedPrizes = prizes.map((p, i) =>
             i === prizeIndex ? { ...p, isDrawn: true, itemName: finalItemName } : p
           );
           const record: WinnerRecord = {
             id: generateId(),
-            participantName: safeWinner.name,
-            entryId: safeWinner.id,
+            participantName: winner.name,
+            entryId: winner.id,
             prizeId: prize.id,
             prizeLabel: prize.label,
             itemName: finalItemName,
             timestamp: new Date().toISOString(),
           };
 
-          onSpinComplete({ winner: safeWinner, record, updatedParticipants, updatedPrizes });
+          onSpinComplete({ winner, record, updatedParticipants, updatedPrizes });
         }
       }
 
       rafRef.current = requestAnimationFrame(animate);
     },
-    [isSpinning, participants, prizes, onSpinComplete, onNoEligible, startSpinSound, stopSpinSound, playWinSound, fireConfetti]
+    [isSpinning, participants, prizes, onSpinComplete, startSpinSound, stopSpinSound, playWinSound, fireConfetti]
   );
 
-  return { rotation, isSpinning, triggerSpin };
+  const resetRotation = useCallback(() => {
+    rotationRef.current = 0;
+    setRotation(0);
+  }, []);
+
+  return { rotation, isSpinning, playSpinAnimation, generateSpinTarget, resetRotation };
 }

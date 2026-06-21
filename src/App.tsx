@@ -8,10 +8,12 @@ import WinnersTable from './components/WinnersTable';
 import ParticipantManager from './components/ParticipantManager';
 import PrizeProgress from './components/PrizeProgress';
 import ConfettiLayer from './components/ConfettiLayer';
+import RoleSelectionModal from './components/RoleSelectionModal';
 
 import { usePersistedState, clearPersistedKey } from './hooks/usePersistedState';
 import { useWheel, type SpinResult } from './hooks/useWheel';
 import { useSupabaseParticipants } from './hooks/useSupabaseParticipants';
+import { useSyncChannel } from './hooks/useSyncChannel';
 
 import type { WinnerRecord, ToastMessage } from './types';
 import { INITIAL_PRIZES } from './data/initialState';
@@ -26,6 +28,16 @@ const STORAGE_KEYS = {
 // ─── APP ─────────────────────────────────────────────────────────────────────
 
 const App: React.FC = () => {
+  // ── Role Selection ─────────────────────────────────────────────────────────
+  const [role, setRole] = useState<'viewer' | 'admin' | null>(() => {
+    return sessionStorage.getItem('jeanys_role') as 'viewer' | 'admin' | null;
+  });
+
+  const handleSelectRole = useCallback((selectedRole: 'viewer' | 'admin') => {
+    sessionStorage.setItem('jeanys_role', selectedRole);
+    setRole(selectedRole);
+  }, []);
+
   // ── Supabase participants (replaces localStorage for participants) ─────────
   const {
     participants,
@@ -83,12 +95,44 @@ const App: React.FC = () => {
   }, [addToast]);
 
   // ── useWheel hook ────────────────────────────────────────────────────────
-  const { rotation, isSpinning, triggerSpin } = useWheel({
+  const { rotation, isSpinning, playSpinAnimation, generateSpinTarget, resetRotation } = useWheel({
     participants,
     prizes,
     onSpinComplete: handleSpinComplete,
     onNoEligible: handleNoEligible,
   });
+
+  // ── Sync Channel ─────────────────────────────────────────────────────────
+  const { broadcastSpin, broadcastRestart } = useSyncChannel({
+    role,
+    prizes,
+    winners,
+    participants,
+    onSpinRemote: (payload) => {
+      playSpinAnimation(payload.prizeIndex, payload.winner, payload.finalItemName);
+    },
+    onSyncStateRemote: (payload) => {
+      setPrizes(payload.prizes);
+      setWinners(payload.winners);
+      setParticipants(payload.participants);
+    },
+    onRestartRemote: () => {
+      setPrizes(JSON.parse(JSON.stringify(INITIAL_PRIZES)));
+      setWinners([]);
+      setParticipants((prev) => prev.map((p) => ({ ...p, hasWon: false })));
+      setPendingWinner(null);
+      resetRotation();
+    },
+  });
+
+  // ── Admin Spin Trigger ───────────────────────────────────────────────────
+  const adminSpinTrigger = useCallback((prizeIndex: number) => {
+    const target = generateSpinTarget(prizeIndex);
+    if (target) {
+      broadcastSpin({ prizeIndex, ...target });
+      playSpinAnimation(prizeIndex, target.winner, target.finalItemName);
+    }
+  }, [generateSpinTarget, broadcastSpin, playSpinAnimation]);
 
   // ── Shuffle participants ─────────────────────────────────────────────────
   const handleShuffleParticipants = useCallback(() => {
@@ -100,17 +144,22 @@ const App: React.FC = () => {
   // ── Restart Draw ─────────────────────────────────────────────────────────
   const handleRestartDraw = useCallback(() => {
     if (isSpinning) return;
-    if (window.confirm("Are you sure you want to restart? This will clear all winners but keep the participant list.")) {
-      setPrizes(INITIAL_PRIZES);
-      setWinners([]);
-      // Reset hasWon flag in Supabase for all participants
-      setParticipants((prev) => prev.map(p => ({ ...p, hasWon: false })));
-      import('./lib/supabase').then(({ supabase }) => {
-        supabase.from('participants').update({ hasWon: false }).neq('id', '00000000-0000-0000-0000-000000000000');
-      });
-      addToast('🔄 Draw has been restarted!', 'info');
-    }
-  }, [isSpinning, setPrizes, setWinners, setParticipants, addToast]);
+    
+    setPrizes(JSON.parse(JSON.stringify(INITIAL_PRIZES)));
+    setWinners([]);
+    // Reset hasWon flag in Supabase for all participants
+    setParticipants((prev) => prev.map((p) => ({ ...p, hasWon: false })));
+    resetRotation();
+    
+    import('./lib/supabase')
+      .then(({ supabase }) => {
+        return supabase.from('participants').update({ hasWon: false }).neq('id', '00000000-0000-0000-0000-000000000000');
+      })
+      .catch(err => console.error("Bg update fail", err));
+    // Broadcast this instant reset to viewers!
+    broadcastRestart();
+    addToast('🔄 Draw has been restarted!', 'info');
+  }, [isSpinning, setPrizes, setWinners, setParticipants, broadcastRestart, resetRotation, addToast]);
 
   // ── Admin: add participants ──────────────────────────────────────────────
   const handleAddParticipants = useCallback(
@@ -143,6 +192,8 @@ const App: React.FC = () => {
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+      {!role && <RoleSelectionModal onSelectRole={handleSelectRole} />}
+
       {/* Ambient sparkles + toasts */}
       <ConfettiLayer toasts={toasts} onDismissToast={dismissToast} />
 
@@ -286,74 +337,80 @@ const App: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 justify-center mt-6">
-              <button
-                className="btn-danger"
-                onClick={handleRestartDraw}
-                disabled={isSpinning || winners.length === 0}
-                style={{ fontSize: '0.95rem' }}
-                title="Clear all winners and reset the prizes"
-              >
-                🔄 Restart
-              </button>
-              <button
-                className="btn-secondary"
-                onClick={handleShuffleParticipants}
-                disabled={isSpinning || participants.length === 0}
-                style={{ fontSize: '0.95rem' }}
-              >
-                🔀 Shuffle
-              </button>
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  const nextPrizeIdx = prizes.findIndex((p) => !p.isDrawn);
-                  if (nextPrizeIdx !== -1) triggerSpin(nextPrizeIdx);
-                }}
-                disabled={
-                  isSpinning ||
-                  prizes.findIndex((p) => !p.isDrawn) === -1 ||
-                  participants.filter((p) => !p.hasWon).length === 0
-                }
-                style={{ fontSize: '1.05rem', padding: '0.6rem 2rem' }}
-              >
-                🎡 SPIN
-              </button>
-            </div>
+            {role === 'admin' && (
+              <div className="flex flex-wrap gap-3 justify-center mt-6">
+                <button
+                  className="btn-danger"
+                  onClick={handleRestartDraw}
+                  disabled={isSpinning || winners.length === 0}
+                  style={{ fontSize: '0.95rem' }}
+                  title="Clear all winners and reset the prizes"
+                >
+                  🔄 Restart
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={handleShuffleParticipants}
+                  disabled={isSpinning || participants.length === 0}
+                  style={{ fontSize: '0.95rem' }}
+                >
+                  🔀 Shuffle
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    const nextPrizeIdx = prizes.findIndex((p) => !p.isDrawn);
+                    if (nextPrizeIdx !== -1) adminSpinTrigger(nextPrizeIdx);
+                  }}
+                  disabled={
+                    isSpinning ||
+                    prizes.findIndex((p) => !p.isDrawn) === -1 ||
+                    participants.filter((p) => !p.hasWon).length === 0
+                  }
+                  style={{ fontSize: '1.05rem', padding: '0.6rem 2rem' }}
+                >
+                  🎡 SPIN
+                </button>
+              </div>
+            )}
           </motion.div>
 
           {/* Control panel */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-          >
-            <ControlPanel
-              prizes={prizes}
-              winners={winners}
-              participants={participants}
-              isSpinning={isSpinning}
-              onSpin={triggerSpin}
-            />
-          </motion.div>
+          {role === 'admin' && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+            >
+              <ControlPanel
+                prizes={prizes}
+                winners={winners}
+                participants={participants}
+                isSpinning={isSpinning}
+                onSpin={adminSpinTrigger}
+              />
+            </motion.div>
+          )}
         </div>
 
         {/* RIGHT COLUMN — Admin + Winners table */}
         <div className="flex flex-col gap-4">
           {/* Admin panel */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <ParticipantManager
-              participants={participants}
-              winners={winners}
-              onAddParticipants={handleAddParticipants}
-              onRemoveParticipant={handleRemoveParticipant}
-              onReset={handleReset}
-            />
-          </motion.div>
+          {role === 'admin' && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <ParticipantManager
+                participants={participants}
+                winners={winners}
+                onAddParticipants={handleAddParticipants}
+                onRemoveParticipant={handleRemoveParticipant}
+                onReset={handleReset}
+              />
+            </motion.div>
+          )}
 
           {/* Winners table */}
           <motion.div

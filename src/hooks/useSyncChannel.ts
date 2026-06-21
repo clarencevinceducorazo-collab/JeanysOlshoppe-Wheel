@@ -1,0 +1,130 @@
+import { useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../lib/supabase';
+import type { Participant, Prize, WinnerRecord } from '../types';
+
+export interface SyncStatePayload {
+  prizes: Prize[];
+  winners: WinnerRecord[];
+  participants: Participant[];
+}
+
+export interface SpinPayload {
+  prizeIndex: number;
+  winner: Participant;
+  finalItemName: string;
+}
+
+interface UseSyncChannelOptions {
+  role: 'viewer' | 'admin' | null;
+  // Local state references (for admin broadcasting)
+  prizes: Prize[];
+  winners: WinnerRecord[];
+  participants: Participant[];
+  
+  // Callbacks for receiving events
+  onSpinRemote?: (payload: SpinPayload) => void;
+  onSyncStateRemote?: (payload: SyncStatePayload) => void;
+  onRestartRemote?: () => void;
+}
+
+export function useSyncChannel({
+  role,
+  prizes,
+  winners,
+  participants,
+  onSpinRemote,
+  onSyncStateRemote,
+  onRestartRemote,
+}: UseSyncChannelOptions) {
+  
+  // Keep mutable references to latest state & callbacks to avoid recreating the channel
+  const stateRef = useRef({ prizes, winners, participants });
+  const callbacksRef = useRef({ onSpinRemote, onSyncStateRemote, onRestartRemote });
+
+  useEffect(() => {
+    stateRef.current = { prizes, winners, participants };
+  }, [prizes, winners, participants]);
+
+  useEffect(() => {
+    callbacksRef.current = { onSpinRemote, onSyncStateRemote, onRestartRemote };
+  }, [onSpinRemote, onSyncStateRemote, onRestartRemote]);
+  
+  const broadcastSyncState = useCallback(async () => {
+    if (role !== 'admin') return;
+    await supabase.channel('roulette-room').send({
+      type: 'broadcast',
+      event: 'SYNC_STATE',
+      payload: stateRef.current as SyncStatePayload, // Send latest state
+    });
+  }, [role]);
+
+  const broadcastSpin = useCallback(async (payload: SpinPayload) => {
+    if (role !== 'admin') return;
+    await supabase.channel('roulette-room').send({
+      type: 'broadcast',
+      event: 'SPIN_TRIGGERED',
+      payload,
+    });
+  }, [role]);
+
+  const broadcastRestart = useCallback(async () => {
+    if (role !== 'admin') return;
+    await supabase.channel('roulette-room').send({
+      type: 'broadcast',
+      event: 'RESTART_DRAW',
+    });
+  }, [role]);
+
+  // Setup channel ONCE per role change
+  useEffect(() => {
+    const channel = supabase.channel('roulette-room');
+
+    channel
+      .on('broadcast', { event: 'REQUEST_SYNC' }, () => {
+        if (role === 'admin') broadcastSyncState();
+      })
+      .on('broadcast', { event: 'SYNC_STATE' }, ({ payload }) => {
+        if (role === 'viewer') {
+          callbacksRef.current.onSyncStateRemote?.(payload as SyncStatePayload);
+        }
+      })
+      .on('broadcast', { event: 'SPIN_TRIGGERED' }, ({ payload }) => {
+        if (role === 'viewer') {
+          callbacksRef.current.onSpinRemote?.(payload as SpinPayload);
+        }
+      })
+      .on('broadcast', { event: 'RESTART_DRAW' }, () => {
+        if (role === 'viewer') {
+          callbacksRef.current.onRestartRemote?.();
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED' && role === 'viewer') {
+          channel.send({
+            type: 'broadcast',
+            event: 'REQUEST_SYNC',
+          });
+        }
+        if (status === 'SUBSCRIBED' && role === 'admin') {
+            broadcastSyncState();
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [role, broadcastSyncState]); // No more state/callback churn!
+
+  // Automatically broadcast Admin state when it changes
+  useEffect(() => {
+    if (role === 'admin') {
+      broadcastSyncState();
+    }
+  }, [role, prizes, winners, participants, broadcastSyncState]);
+
+  return {
+    broadcastSpin,
+    broadcastRestart,
+    broadcastSyncState,
+  };
+}
