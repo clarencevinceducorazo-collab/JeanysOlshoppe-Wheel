@@ -156,10 +156,18 @@ export function useWheel({
           playWinSound();
           fireConfetti();
 
+          // Determine final item name (random roll for coupons)
+          let finalItemName = prize.itemName;
+          if (finalItemName.includes('Mystery Coupon')) {
+            const couponValues = [50, 100, 150, 200];
+            const rolledValue = couponValues[Math.floor(Math.random() * couponValues.length)];
+            finalItemName = `Coupon worth ₱${rolledValue}`;
+          }
+
           // Build updated state
           const updatedParticipants = markPersonAsWon(participants, safeWinner.name);
           const updatedPrizes = prizes.map((p, i) =>
-            i === prizeIndex ? { ...p, isDrawn: true } : p
+            i === prizeIndex ? { ...p, isDrawn: true, itemName: finalItemName } : p
           );
           const record: WinnerRecord = {
             id: generateId(),
@@ -167,7 +175,7 @@ export function useWheel({
             entryId: safeWinner.id,
             prizeId: prize.id,
             prizeLabel: prize.label,
-            itemName: prize.itemName,
+            itemName: finalItemName,
             timestamp: new Date().toISOString(),
           };
 

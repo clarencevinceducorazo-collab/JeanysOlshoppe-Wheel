@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { WinnerRecord } from '../types';
 
@@ -34,6 +34,40 @@ const WinnerModal: React.FC<WinnerModalProps> = ({ winner, onClose }) => {
         timeStyle: 'short',
       })
     : '';
+
+  // Coupon rolling animation logic
+  const [displayItemName, setDisplayItemName] = useState('');
+  const [isRolling, setIsRolling] = useState(false);
+
+  useEffect(() => {
+    if (!winner) {
+      setDisplayItemName('');
+      setIsRolling(false);
+      return;
+    }
+    
+    const match = winner.itemName.match(/Coupon worth ₱(\d+)/);
+    if (match) {
+      setIsRolling(true);
+      let ticks = 0;
+      const values = [50, 100, 150, 200];
+      
+      const interval = setInterval(() => {
+        setDisplayItemName(`Coupon worth ₱${values[ticks % values.length]}`);
+        ticks++;
+        if (ticks > 25) { // Roll for 1.25 seconds (50ms * 25)
+          clearInterval(interval);
+          setDisplayItemName(winner.itemName);
+          setIsRolling(false);
+        }
+      }, 50);
+      
+      return () => clearInterval(interval);
+    } else {
+      setDisplayItemName(winner.itemName);
+      setIsRolling(false);
+    }
+  }, [winner]);
 
   return (
     <AnimatePresence>
@@ -214,7 +248,7 @@ const WinnerModal: React.FC<WinnerModalProps> = ({ winner, onClose }) => {
                 fontFamily: 'var(--font-serif)',
               }}
             >
-              {winner.itemName}
+              {displayItemName}
             </motion.div>
 
             <div style={{ fontSize: '0.78rem', color: '#9a6070', marginBottom: '1.5rem' }}>
@@ -223,14 +257,15 @@ const WinnerModal: React.FC<WinnerModalProps> = ({ winner, onClose }) => {
 
             {/* Close button */}
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={onClose}
+              whileHover={!isRolling ? { scale: 1.05 } : {}}
+              whileTap={!isRolling ? { scale: 0.95 } : {}}
+              onClick={() => !isRolling && onClose()}
               id="winner-modal-close"
               className="btn-primary"
+              disabled={isRolling}
               style={{ minWidth: 140, fontSize: '0.95rem' }}
             >
-              🎊 Awesome!
+              🎉 Awesome!
             </motion.button>
           </motion.div>
         </motion.div>

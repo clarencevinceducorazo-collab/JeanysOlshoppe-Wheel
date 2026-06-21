@@ -7,13 +7,22 @@ import { generateId } from '../utils/idGenerator';
  * Consolation prizes #1-#10 follow the four main prizes.
  */
 export const INITIAL_PRIZES: Prize[] = [
-  // Consolation prizes #1-#10
-  ...Array.from({ length: 10 }, (_, i) => ({
+  // 5 Mystery Coupons
+  ...Array.from({ length: 5 }, (_, i) => ({
     id: generateId(),
     tier: 'consolation' as const,
-    label: `Consolation Prize #${i + 1}`,
-    icon: '🎁',
-    itemName: `Consolation Gift #${i + 1}`,
+    label: `Coupon #${i + 1}`,
+    icon: '🎫',
+    itemName: 'Mystery Coupon (₱50-₱200)',
+    isDrawn: false,
+  })),
+  // 4 Consolation Boxes
+  ...Array.from({ length: 4 }, (_, i) => ({
+    id: generateId(),
+    tier: 'consolation' as const,
+    label: `Consolation Box #${i + 1}`,
+    icon: '📦',
+    itemName: `Consolation Box`,
     isDrawn: false,
   })),
   {

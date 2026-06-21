@@ -223,7 +223,7 @@ const App: React.FC = () => {
               marginTop: '0.3rem',
             }}
           >
-            10× Consolation Prizes • Third • Second • First • 🏆 Grand Prize
+            5× Coupons • 4× Consolation Boxes • Third • Second • First • 🏆 Grand Prize
           </p>
         </motion.div>
       </header>
