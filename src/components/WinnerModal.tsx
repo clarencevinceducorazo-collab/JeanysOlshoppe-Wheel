@@ -5,6 +5,7 @@ import type { WinnerRecord } from '../types';
 interface WinnerModalProps {
   winner: WinnerRecord | null;
   onClose: () => void;
+  onRespin?: (winner: WinnerRecord) => void;
 }
 
 /**
@@ -17,7 +18,7 @@ interface WinnerModalProps {
  *
  * Pressing Escape or clicking the backdrop also triggers onClose().
  */
-const WinnerModal: React.FC<WinnerModalProps> = ({ winner, onClose }) => {
+const WinnerModal: React.FC<WinnerModalProps> = ({ winner, onClose, onRespin }) => {
   // Close on Escape key
   useEffect(() => {
     if (!winner) return;
@@ -255,18 +256,35 @@ const WinnerModal: React.FC<WinnerModalProps> = ({ winner, onClose }) => {
               {formattedTime}
             </div>
 
-            {/* Close button */}
-            <motion.button
-              whileHover={!isRolling ? { scale: 1.05 } : {}}
-              whileTap={!isRolling ? { scale: 0.95 } : {}}
-              onClick={() => !isRolling && onClose()}
-              id="winner-modal-close"
-              className="btn-primary"
-              disabled={isRolling}
-              style={{ minWidth: 140, fontSize: '0.95rem' }}
+            {/* Action buttons */}
+            <motion.div
+              className={`flex justify-center flex-wrap ${onRespin ? 'gap-3' : ''}`}
             >
-              🎉 Awesome!
-            </motion.button>
+              {onRespin && (
+                <motion.button
+                  whileHover={!isRolling ? { scale: 1.05 } : {}}
+                  whileTap={!isRolling ? { scale: 0.95 } : {}}
+                  onClick={() => !isRolling && onRespin(winner)}
+                  className="btn-secondary"
+                  disabled={isRolling}
+                  style={{ minWidth: 140, fontSize: '0.95rem' }}
+                >
+                  🔄 Respin
+                </motion.button>
+              )}
+              
+              <motion.button
+                whileHover={!isRolling ? { scale: 1.05 } : {}}
+                whileTap={!isRolling ? { scale: 0.95 } : {}}
+                onClick={() => !isRolling && onClose()}
+                id="winner-modal-close"
+                className="btn-primary"
+                disabled={isRolling}
+                style={{ minWidth: 140, fontSize: '0.95rem' }}
+              >
+                🎉 Awesome!
+              </motion.button>
+            </motion.div>
           </motion.div>
         </motion.div>
       )}

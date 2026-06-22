@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
 import Wheel from './components/Wheel';
@@ -61,6 +61,7 @@ const App: React.FC = () => {
 
   // ── Transient UI state ──────────────────────────────────────────────────
   const [pendingWinner, setPendingWinner] = useState<WinnerRecord | null>(null);
+  const [pendingRespinPrizeId, setPendingRespinPrizeId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // ── Toast helpers ────────────────────────────────────────────────────────
@@ -134,6 +135,17 @@ const App: React.FC = () => {
     }
   }, [generateSpinTarget, broadcastSpin, playSpinAnimation]);
 
+  // ── Auto Respin Effect ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (pendingRespinPrizeId !== null && !isSpinning) {
+      const idx = prizes.findIndex((p) => p.id === pendingRespinPrizeId);
+      if (idx !== -1 && !prizes[idx].isDrawn) {
+        adminSpinTrigger(idx);
+      }
+      setPendingRespinPrizeId(null);
+    }
+  }, [pendingRespinPrizeId, isSpinning, prizes, adminSpinTrigger]);
+
   // ── Shuffle participants ─────────────────────────────────────────────────
   const handleShuffleParticipants = useCallback(() => {
     if (isSpinning) return;
@@ -160,6 +172,38 @@ const App: React.FC = () => {
     broadcastRestart();
     addToast('🔄 Draw has been restarted!', 'info');
   }, [isSpinning, setPrizes, setWinners, setParticipants, broadcastRestart, resetRotation, addToast]);
+
+  // ── Admin Respin ─────────────────────────────────────────────────────────
+  const handleRespin = useCallback(
+    (record: WinnerRecord) => {
+      // Revert the prize's drawn status
+      setPrizes((prev) => prev.map((p) => (p.id === record.prizeId ? { ...p, isDrawn: false, itemName: p.itemName.replace(/Coupon worth ₱\d+/, 'Mystery Coupon (₱50-₱200)') } : p)));
+      
+      // Remove from winners list
+      setWinners((prev) => prev.filter((w) => w.id !== record.id));
+      
+      // Revert participant in local state
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === record.entryId ? { ...p, hasWon: false } : p))
+      );
+      
+      // Close the modal
+      setPendingWinner(null);
+      
+      // Revert participant in Supabase behind the scenes
+      import('./lib/supabase')
+        .then(({ supabase }) => {
+          return supabase.from('participants').update({ hasWon: false }).eq('id', record.entryId);
+        })
+        .catch(err => console.error("Bg update fail", err));
+        
+      addToast(`🔄 Respinning for ${record.prizeLabel}...`, 'info');
+
+      // Schedule the auto-respin
+      setPendingRespinPrizeId(record.prizeId);
+    },
+    [setPrizes, setWinners, setParticipants, addToast]
+  );
 
   // ── Admin: add participants ──────────────────────────────────────────────
   const handleAddParticipants = useCallback(
@@ -198,7 +242,11 @@ const App: React.FC = () => {
       <ConfettiLayer toasts={toasts} onDismissToast={dismissToast} />
 
       {/* Winner modal */}
-      <WinnerModal winner={pendingWinner} onClose={() => setPendingWinner(null)} />
+      <WinnerModal 
+        winner={pendingWinner} 
+        onClose={() => setPendingWinner(null)} 
+        onRespin={role === 'admin' ? handleRespin : undefined}
+      />
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <header
