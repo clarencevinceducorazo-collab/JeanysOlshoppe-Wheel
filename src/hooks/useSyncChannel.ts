@@ -16,6 +16,7 @@ export interface SpinPayload {
 
 interface UseSyncChannelOptions {
   role: 'viewer' | 'admin' | null;
+  isReady: boolean;
   // Local state references (for admin broadcasting)
   prizes: Prize[];
   winners: WinnerRecord[];
@@ -29,6 +30,7 @@ interface UseSyncChannelOptions {
 
 export function useSyncChannel({
   role,
+  isReady,
   prizes,
   winners,
   participants,
@@ -50,7 +52,7 @@ export function useSyncChannel({
   }, [onSpinRemote, onSyncStateRemote, onRestartRemote]);
   
   const broadcastSyncState = useCallback(async () => {
-    if (role !== 'admin') return;
+    if (role !== 'admin' || !isReady) return;
     const payload = stateRef.current as SyncStatePayload;
 
     await supabase.channel('roulette-room').send({
@@ -79,15 +81,16 @@ export function useSyncChannel({
   }, [role]);
 
   const broadcastRestart = useCallback(async () => {
-    if (role !== 'admin') return;
+    if (role !== 'admin' || !isReady) return;
     await supabase.channel('roulette-room').send({
       type: 'broadcast',
       event: 'RESTART_DRAW',
     });
-  }, [role]);
+  }, [role, isReady]);
 
   // Setup channel ONCE per role change
   useEffect(() => {
+    if (!isReady || !role) return;
     const channel = supabase.channel('roulette-room');
 
     channel
@@ -124,14 +127,14 @@ export function useSyncChannel({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [role, broadcastSyncState]); // No more state/callback churn!
+  }, [role, isReady, broadcastSyncState]); // No more state/callback churn!
 
   // Automatically broadcast Admin state when it changes
   useEffect(() => {
-    if (role === 'admin') {
+    if (role === 'admin' && isReady) {
       broadcastSyncState();
     }
-  }, [role, prizes, winners, participants, broadcastSyncState]);
+  }, [role, isReady, prizes, winners, participants, broadcastSyncState]);
 
   return {
     broadcastSpin,

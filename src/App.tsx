@@ -42,6 +42,7 @@ const App: React.FC = () => {
   const {
     participants,
     globalMetadata,
+    loading: isParticipantsLoading,
     addParticipants: dbAddParticipants,
     removeParticipant: dbRemoveParticipant,
     markWon: dbMarkWon,
@@ -104,19 +105,23 @@ const App: React.FC = () => {
     onNoEligible: handleNoEligible,
   });
 
-  // ── Auto Sync Hydration for Viewers ──────────────────────────────────────
+  // ── Auto Sync Hydration for Viewers & Admins ──────────────────────────────────────
   const [hydratedFromGlobal, setHydratedFromGlobal] = useState(false);
   useEffect(() => {
-    if (role === 'viewer' && globalMetadata && !hydratedFromGlobal) {
-      if (globalMetadata.prizes) setPrizes(globalMetadata.prizes);
-      if (globalMetadata.winners) setWinners(globalMetadata.winners);
+    // Wait until participants query finishes. Then hydrate exactly once.
+    if (!isParticipantsLoading && role && !hydratedFromGlobal) {
+      if (globalMetadata) {
+        if (globalMetadata.prizes && globalMetadata.prizes.length > 0) setPrizes(globalMetadata.prizes);
+        if (globalMetadata.winners && globalMetadata.winners.length > 0) setWinners(globalMetadata.winners);
+      }
       setHydratedFromGlobal(true);
     }
-  }, [role, globalMetadata, hydratedFromGlobal, setPrizes, setWinners]);
+  }, [role, isParticipantsLoading, globalMetadata, hydratedFromGlobal, setPrizes, setWinners]);
 
   // ── Sync Channel ─────────────────────────────────────────────────────────
   const { broadcastSpin, broadcastRestart } = useSyncChannel({
     role,
+    isReady: hydratedFromGlobal,
     prizes,
     winners,
     participants,
