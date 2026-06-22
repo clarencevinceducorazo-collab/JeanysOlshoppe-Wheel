@@ -51,10 +51,21 @@ export function useSyncChannel({
   
   const broadcastSyncState = useCallback(async () => {
     if (role !== 'admin') return;
+    const payload = stateRef.current as SyncStatePayload;
+
     await supabase.channel('roulette-room').send({
       type: 'broadcast',
       event: 'SYNC_STATE',
-      payload: stateRef.current as SyncStatePayload, // Send latest state
+      payload,
+    });
+
+    // Save to global Supabase row (fire and forget)
+    supabase.from('participants').upsert({
+      id: '00000000-0000-0000-0000-000000000000',
+      name: JSON.stringify({ prizes: payload.prizes, winners: payload.winners }),
+      hasWon: false
+    }).then(({ error }) => {
+      if (error) console.error("Global state sync failed", error);
     });
   }, [role]);
 

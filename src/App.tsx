@@ -41,6 +41,7 @@ const App: React.FC = () => {
   // ── Supabase participants (replaces localStorage for participants) ─────────
   const {
     participants,
+    globalMetadata,
     addParticipants: dbAddParticipants,
     removeParticipant: dbRemoveParticipant,
     markWon: dbMarkWon,
@@ -102,6 +103,16 @@ const App: React.FC = () => {
     onSpinComplete: handleSpinComplete,
     onNoEligible: handleNoEligible,
   });
+
+  // ── Auto Sync Hydration for Viewers ──────────────────────────────────────
+  const [hydratedFromGlobal, setHydratedFromGlobal] = useState(false);
+  useEffect(() => {
+    if (role === 'viewer' && globalMetadata && !hydratedFromGlobal) {
+      if (globalMetadata.prizes) setPrizes(globalMetadata.prizes);
+      if (globalMetadata.winners) setWinners(globalMetadata.winners);
+      setHydratedFromGlobal(true);
+    }
+  }, [role, globalMetadata, hydratedFromGlobal, setPrizes, setWinners]);
 
   // ── Sync Channel ─────────────────────────────────────────────────────────
   const { broadcastSpin, broadcastRestart } = useSyncChannel({

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Participant } from '../types';
+import type { Participant, Prize } from '../types';
 import { generateId } from '../utils/idGenerator';
 
 /**
@@ -12,6 +12,7 @@ import { generateId } from '../utils/idGenerator';
  */
 export function useSupabaseParticipants() {
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [globalMetadata, setGlobalMetadata] = useState<{ prizes: Prize[], winners: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +28,16 @@ export function useSupabaseParticipants() {
 
       if (err) throw err;
 
-      const mapped: Participant[] = (data ?? []).map((row) => ({
+      const metaRow = (data ?? []).find(r => r.id === '00000000-0000-0000-0000-000000000000');
+      if (metaRow && metaRow.name) {
+        try {
+          setGlobalMetadata(JSON.parse(metaRow.name));
+        } catch(e) {}
+      }
+
+      const mapped: Participant[] = (data ?? [])
+        .filter((row) => row.id !== '00000000-0000-0000-0000-000000000000')
+        .map((row) => ({
         id: row.id as string,
         name: row.name as string,
         hasWon: row.hasWon as boolean,
@@ -140,5 +150,6 @@ export function useSupabaseParticipants() {
     resetAll,
     shuffleParticipants,
     refetch: fetchParticipants,
+    globalMetadata,
   };
 }
